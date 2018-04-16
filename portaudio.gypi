@@ -98,7 +98,6 @@
           "defines": [
             "WIN32=1",
             "_USRDLL=1",
-            "PA_ENABLE_DEBUG_OUTPUT=1",
             "_CRT_SECURE_NO_DEPRECATE=1",
             "PAWIN_USE_WDMKS_DEVICE_INFO=1",
             "PA_USE_ASIO=1",
@@ -117,7 +116,8 @@
           "configurations": {
             "Debug": {
               "defines": [
-                "_DEBUG=1"
+                "_DEBUG=1",
+                "PA_ENABLE_DEBUG_OUTPUT=1"
               ],
               "msvs_settings": {
                 "VCCLCompilerTool": {
@@ -150,7 +150,8 @@
             },
             "Release": {
               "defines": [
-                "NDEBUG=1"
+                "NDEBUG=1",
+                "PA_ENABLE_DEBUG_OUTPUT=0",
               ],
               "msvs_settings": {
                 "VCCLCompilerTool": {
