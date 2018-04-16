@@ -150,8 +150,7 @@
             },
             "Release": {
               "defines": [
-                "NDEBUG=1",
-                "PA_ENABLE_DEBUG_OUTPUT=0",
+                "NDEBUG=1"
               ],
               "msvs_settings": {
                 "VCCLCompilerTool": {
