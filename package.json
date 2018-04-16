@@ -23,12 +23,14 @@
     "nan": "^2.10.0"
   },
   "devDependencies": {
+    "extract-zip": "^1.6.6",
     "tape": "^4.9.0"
   },
   "author": "Streampunk Media Ltd",
   "license": "Apache-2.0",
   "scripts": {
     "install": "node-gyp rebuild",
+    "debug": "node-gyp rebuild --debug",
     "preinstall": "node tasks/preinstall.js"
   },
   "gypfile": true

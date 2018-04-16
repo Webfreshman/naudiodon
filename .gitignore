@@ -3,3 +3,5 @@
 /node_modules
 test.wav
 rawAudio.raw
+repos/ASIOSDK2.3
+*.bak

@@ -51,19 +51,22 @@
                     "ExceptionHandling": 1
                   }
                 }
+              },
+              "Debug": {
+                "msvs_settings": {
+                  "VCCLCompilerTool": {
+                    "RuntimeTypeInfo": "true",
+                    "ExceptionHandling": 1
+                  }
+                }
               }
             },
-            "libraries": [
-               "-l../portaudio/bin/portaudio_x64.lib"
+            'dependencies': [
+              'portaudio.gypi:portaudio_x64',
             ],
-            "copies": [
-              {
-                "destination": "build/Release",
-                "files": [
-                  "portaudio/bin/portaudio_x64.dll"
-                ]
-              }
-            ]
+            "libraries": [
+              "-l<@(PRODUCT_DIR)/portaudio_x64.lib"
+            ],
           },
         ],
         [
