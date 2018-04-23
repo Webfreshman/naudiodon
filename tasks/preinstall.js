@@ -8,8 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const execSync = require('child_process').execSync;
 
+const asioSdkName = 'ASIOSDK2.3';
 const asioSdkUrl = 'https://www.steinberg.net/sdk_downloads/asiosdk2.3.zip';
-const asioSdkDir = path.normalize(path.join(__dirname, '..', 'repos','ASIOSDK2.3'));
+const asioSdkDir = path.normalize(path.join(__dirname, '..', 'repos', asioSdkName));
 const reposPath = path.normalize(path.join(__dirname, '..', 'repos'));
 const zipPath = path.normalize(path.join(reposPath, path.basename(asioSdkUrl)));
 const protocol = { 'http:': http, 'https:': https };
@@ -17,6 +18,7 @@ const topLevel = path.normalize(path.join(__dirname, '..'));
 
 // Install the dependencies need for unzipping an archive
 execSync('npm install -D extract-zip', { cwd: topLevel });
+execSync('npm install -D rexreplace', { cwd: topLevel });
 const extract = require('extract-zip');
 
 function request(url, callback) {
@@ -69,6 +71,10 @@ if ( !fs.existsSync(asioSdkDir) ) {
           }
           // Remove the zipped ASIO SDK
           fs.unlinkSync(zipPath);
+
+          // Patch the ASIO SDK - path must be relative
+          let fileToPatch = path.join('.', 'repos', asioSdkName, 'host', 'pc', 'asiolist.cpp');
+          execSync(`npx rexreplace ASIODRVSTRUCT\\[1\\] ASIODRVSTRUCT "${fileToPatch}"`, { cwd: topLevel });
         });
       });
     });

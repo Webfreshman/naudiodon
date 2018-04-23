@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "extract-zip": "^1.6.6",
+    "rexreplace": "^3.0.1",
     "tape": "^4.9.0"
   },
   "author": "Streampunk Media Ltd",
