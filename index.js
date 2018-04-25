@@ -97,7 +97,7 @@ function AudioInputOutput(options) {
     objectMode: false,
     write: (chunk, encoding, cb) => this.AudioInOutAdon.write(chunk, cb),
     read: size => {
-      this.AudioInAdon.read(size, (err, buf) => {
+      this.AudioInOutAdon.read(size, (err, buf) => {
         if (err)
           this.emit('error', err);
         else
