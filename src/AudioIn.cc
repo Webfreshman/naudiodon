@@ -45,7 +45,7 @@ public:
       Nan::ThrowError(err.c_str());
     }
 
-    printf("Input %s\n", mAudioOptions->toString().c_str());
+    //printf("Input %s\n", mAudioOptions->toString().c_str());
 
     PaStreamParameters inParams;
     memset(&inParams, 0, sizeof(PaStreamParameters));
@@ -57,7 +57,7 @@ public:
       inParams.device = Pa_GetDefaultInputDevice();
     if (inParams.device == paNoDevice)
       Nan::ThrowError("No default input device");
-    printf("Input device name is %s\n", Pa_GetDeviceInfo(inParams.device)->name);
+    //printf("Input device name is %s\n", Pa_GetDeviceInfo(inParams.device)->name);
 
     inParams.channelCount = mAudioOptions->channelCount();
     if (inParams.channelCount > Pa_GetDeviceInfo(inParams.device)->maxInputChannels)

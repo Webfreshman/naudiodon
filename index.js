@@ -15,7 +15,7 @@
 
 const util = require("util");
 const EventEmitter = require("events");
-const { Readable, Writable } = require('stream');
+const { Readable, Writable, Duplex } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
 
 // var SegfaultHandler = require('segfault-handler');
@@ -39,8 +39,7 @@ function AudioInput(options) {
     read: size => {
       this.AudioInAdon.read(size, (err, buf) => {
         if (err)
-          console.error(err);
-          // this.emit('error', err); // causes Streampunk Microphone node to exit early...
+          this.emit('error', err); // causes Streampunk Microphone node to exit early...
         else
           this.push(buf);
       });
@@ -85,3 +84,38 @@ function AudioOutput(options) {
 }
 util.inherits(AudioOutput, Writable);
 exports.AudioOutput = AudioOutput;
+
+function AudioInputOutput(options) {
+  if (!(this instanceof AudioInputOutput))
+    return new AudioInputOutput(options);
+
+  let Active = true;
+  this.AudioInOutAdon = new portAudioBindings.AudioInOut(options);
+  Duplex.call(this, {
+    highWaterMark: 16384,
+    decodeStrings: false,
+    objectMode: false,
+    write: (chunk, encoding, cb) => this.AudioInOutAdon.write(chunk, cb),
+    read: size => {
+      this.AudioInAdon.read(size, (err, buf) => {
+        if (err)
+          this.emit('error', err);
+        else
+          this.push(buf);
+      });
+    }
+  });
+
+  this.start = () => this.AudioInOutAdon.start();
+  this.quit = cb => {
+    Active = false;
+    const quitCb = arguments[0];
+    this.AudioInOutAdon.quit(() => {
+      if (typeof quitCb === 'function')
+        quitCb();
+    });
+  }
+  this.on('finish', () => { if (Active) this.quit(); });
+}
+util.inherits(AudioInputOutput, Duplex);
+exports.AudioInputOutput = AudioInputOutput;

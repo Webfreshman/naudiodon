@@ -18,6 +18,7 @@
 #include "Persist.h"
 #include "Params.h"
 #include "ChunkQueue.h"
+#include "AudioChunk.h"
 #include <mutex>
 #include <condition_variable>
 #include <portaudio.h>
@@ -25,21 +26,6 @@
 using namespace v8;
 
 namespace streampunk {
-
-class AudioChunk {
-public:
-  AudioChunk (Local<Object> chunk)
-    : mPersistentChunk(new Persist(chunk)),
-      mChunk(Memory::makeNew((uint8_t *)node::Buffer::Data(chunk), (uint32_t)node::Buffer::Length(chunk)))
-    { }
-  ~AudioChunk() { }
-  
-  std::shared_ptr<Memory> chunk() const { return mChunk; }
-
-private:
-  std::unique_ptr<Persist> mPersistentChunk;
-  std::shared_ptr<Memory> mChunk;
-};
 
 class OutContext {
 public:
@@ -53,7 +39,7 @@ public:
       Nan::ThrowError(err.c_str());
     }
 
-    printf("Output %s\n", mAudioOptions->toString().c_str());
+    //printf("Output %s\n", mAudioOptions->toString().c_str());
 
     PaStreamParameters outParams;
     memset(&outParams, 0, sizeof(PaStreamParameters));
@@ -65,7 +51,7 @@ public:
       outParams.device = Pa_GetDefaultOutputDevice();
     if (outParams.device == paNoDevice)
       Nan::ThrowError("No default output device");
-    printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
+    //printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
 
     outParams.channelCount = mAudioOptions->channelCount();
     if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels)
@@ -132,7 +118,7 @@ public:
         uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
         uint32_t missingBytes = bytesRemaining - bytesCopied;
         if (missingBytes > 0) {
-          printf("Finishing - %d bytes not available for the last output buffer\n", missingBytes);
+          //printf("Finishing - %d bytes not available for the last output buffer\n", missingBytes);
           memset(dst + bytesCopied, 0, missingBytes);
         }
       }
