@@ -90,14 +90,14 @@ function AudioInputOutput(options) {
     return new AudioInputOutput(options);
 
   let Active = true;
-  this.AudioInOutAdon = new portAudioBindings.AudioInOut(options);
+  this.AudioInOutAddon = new portAudioBindings.AudioInOut(options);
   Duplex.call(this, {
     highWaterMark: 16384,
     decodeStrings: false,
     objectMode: false,
-    write: (chunk, encoding, cb) => this.AudioInOutAdon.write(chunk, cb),
+    write: (chunk, encoding, cb) => this.AudioInOutAddon.write(chunk, cb),
     read: size => {
-      this.AudioInOutAdon.read(size, (err, buf) => {
+      this.AudioInOutAddon.read(size, (err, buf) => {
         if (err)
           this.emit('error', err);
         else
@@ -106,11 +106,11 @@ function AudioInputOutput(options) {
     }
   });
 
-  this.start = () => this.AudioInOutAdon.start();
+  this.start = () => this.AudioInOutAddon.start();
   this.quit = cb => {
     Active = false;
     const quitCb = arguments[0];
-    this.AudioInOutAdon.quit(() => {
+    this.AudioInOutAddon.quit(() => {
       if (typeof quitCb === 'function')
         quitCb();
     });

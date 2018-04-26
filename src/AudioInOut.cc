@@ -331,12 +331,12 @@ int InOutCallback(const void *input, void *output, unsigned long frameCount,
   return retCode;
 }
 
-class InWorker : public Nan::AsyncWorker {
+class InputIoWorker : public Nan::AsyncWorker {
   public:
-    InWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
+    InputIoWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
       : AsyncWorker(callback), mInOutContext(InOutContext)
     { }
-    ~InWorker() {}
+    ~InputIoWorker() {}
 
     void Execute() {
       mInChunk = mInOutContext->readChunk();
@@ -367,12 +367,12 @@ class InWorker : public Nan::AsyncWorker {
     std::shared_ptr<Memory> mInChunk;
 };
 
-class OutWorker : public Nan::AsyncWorker {
+class OutputIoWorker : public Nan::AsyncWorker {
   public:
-    OutWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback, std::shared_ptr<AudioChunk> audioChunk)
+    OutputIoWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback, std::shared_ptr<AudioChunk> audioChunk)
       : AsyncWorker(callback), mInOutContext(InOutContext), mAudioChunk(audioChunk) 
     { }
-    ~OutWorker() {}
+    ~OutputIoWorker() {}
 
     void Execute() {
       mInOutContext->addChunk(mAudioChunk);
@@ -394,12 +394,12 @@ class OutWorker : public Nan::AsyncWorker {
     std::shared_ptr<AudioChunk> mAudioChunk;
 };
 
-class QuitInWorker : public Nan::AsyncWorker {
+class QuitIotWorker : public Nan::AsyncWorker {
   public:
-    QuitInWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
+    QuitIotWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
       : AsyncWorker(callback), mInOutContext(InOutContext)
     { }
-    ~QuitInWorker() {}
+    ~QuitIotWorker() {}
 
     void Execute() {
       mInOutContext->quit();
@@ -459,7 +459,7 @@ NAN_METHOD(AudioInOut::Read) {
     return Nan::ThrowError("AudioInOut is not configured for input");
   }
 
-  AsyncQueueWorker(new InWorker(obj->getContext(), new Nan::Callback(callback)));
+  AsyncQueueWorker(new InputIoWorker(obj->getContext(), new Nan::Callback(callback)));
   info.GetReturnValue().SetUndefined();
 }
 
@@ -479,7 +479,7 @@ NAN_METHOD(AudioInOut::Write) {
     return Nan::ThrowError("AudioInOut is not configured for output");
   }
 
-  AsyncQueueWorker(new OutWorker(obj->getContext(), new Nan::Callback(callback), std::make_shared<AudioChunk>(chunkObj)));
+  AsyncQueueWorker(new OutputIoWorker(obj->getContext(), new Nan::Callback(callback), std::make_shared<AudioChunk>(chunkObj)));
   info.GetReturnValue().SetUndefined();
 }
 
@@ -492,7 +492,7 @@ NAN_METHOD(AudioInOut::Quit) {
   Local<Function> callback = Local<Function>::Cast(info[0]);
   AudioInOut* obj = Nan::ObjectWrap::Unwrap<AudioInOut>(info.Holder());
 
-  AsyncQueueWorker(new QuitInWorker(obj->getContext(), new Nan::Callback(callback)));
+  AsyncQueueWorker(new QuitIotWorker(obj->getContext(), new Nan::Callback(callback)));
   info.GetReturnValue().SetUndefined();
 }
 
