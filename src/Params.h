@@ -123,7 +123,7 @@ public:
     ss << "channels " << mChannelCount << ", ";
     ss << "bits per sample " << mSampleFormat << ", ";
     ss << "max queue " << mMaxQueue << ", ";
-    ss << "channel selctors [";
+    ss << "channel selectors [";
     for ( size_t idx = 0; idx < mChannelSelectors.size(); ++idx ) {
       ss << " " << mChannelSelectors[idx];
     }
