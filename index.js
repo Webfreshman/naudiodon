@@ -167,15 +167,15 @@ if ( os.platform() == 'win32' ) {
     };
 
     this.getInputChannelNames = function(channelIndex) {
-      return this.AudioAsio.getInputChannelNames(channelIndex);
+      return this.AudioAsioAddon.getInputChannelNames(channelIndex);
     };
 
     this.getOutputChannelNames = function(channelIndex) {
-      return this.AudioAsio.getOutputChannelNames(channelIndex);
+      return this.AudioAsioAddon.getOutputChannelNames(channelIndex);
     };
 
     this.setStreamSampleRate = function(sampleRate) {
-      return this.AudioAsio.setStreamSampleRate(sampleRate);
+      return this.AudioAsioAddon.setStreamSampleRate(sampleRate);
     };
   }
   util.inherits(AudioAsio, Duplex);
