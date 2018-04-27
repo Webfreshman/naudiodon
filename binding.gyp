@@ -10,12 +10,12 @@
         "src/AudioInOut.cc",
         "src/AudioChunk.cc"
       ],
-      "include_dirs": [
-        "<!(node -e \"require('nan')\")", "portaudio/include"
-      ],
       "conditions" : [
         [
           'OS=="mac"', {
+            "include_dirs": [
+              "<!(node -e \"require('nan')\")", "portaudio/include"
+            ],
             'xcode_settings': {
               'GCC_ENABLE_CPP_RTTI': 'YES',
               'MACOSX_DEPLOYMENT_TARGET': '10.7',
@@ -45,6 +45,12 @@
         ],
         [
           'OS=="win"', {
+            "sources": [
+              "src/AudioAsio.cc"
+            ],
+            "include_dirs": [
+              "<!(node -e \"require('nan')\")", "repos/portaudio/include"
+            ],
             "configurations": {
               "Release": {
                 "msvs_settings": {
@@ -73,6 +79,9 @@
         ],
         [
           'OS=="linux"', {
+            "include_dirs": [
+              "<!(node -e \"require('nan')\")", "portaudio/include"
+            ],
             "conditions": [
               ['target_arch=="arm"', {
                 "link_settings": {

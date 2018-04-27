@@ -17,6 +17,7 @@ const util = require("util");
 const EventEmitter = require("events");
 const { Readable, Writable, Duplex } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
+const os = require('os');
 
 // var SegfaultHandler = require('segfault-handler');
 // SegfaultHandler.registerHandler("crash.log");
@@ -119,3 +120,64 @@ function AudioInputOutput(options) {
 }
 util.inherits(AudioInputOutput, Duplex);
 exports.AudioInputOutput = AudioInputOutput;
+
+//
+// ASIO integration currently only available on Win32 platforms
+//
+if ( os.platform() == 'win32' ) {
+
+  function AudioAsio(options) {
+    if (!(this instanceof AudioAsio))
+      return new AudioAsio(options);
+
+    let Active = true;
+    this.AudioAsioAddon = new portAudioBindings.AudioAsio(options);
+    Duplex.call(this, {
+      highWaterMark: 16384,
+      decodeStrings: false,
+      objectMode: false,
+      write: (chunk, encoding, cb) => this.AudioAsioAddon.write(chunk, cb),
+      read: size => {
+        this.AudioAsioAddon.read(size, (err, buf) => {
+          if (err)
+            this.emit('error', err);
+          else
+            this.push(buf);
+        });
+      }
+    });
+
+    this.start = () => this.AudioAsioAddon.start();
+    this.quit = cb => {
+      Active = false;
+      const quitCb = arguments[0];
+      this.AudioAsioAddon.quit(() => {
+        if (typeof quitCb === 'function')
+          quitCb();
+      });
+    }
+    this.on('finish', () => { if (Active) this.quit(); });
+
+    this.getAvailableBufferSizes = function() {
+      return this.AudioAsioAddon.getAvailableBufferSizes();
+    };
+
+    this.showControlPanel = function(direction) {
+      return this.AudioAsioAddon.showControlPanel(direction);
+    };
+
+    this.getInputChannelNames = function(channelIndex) {
+      return this.AudioAsio.getInputChannelNames(channelIndex);
+    };
+
+    this.getOutputChannelNames = function(channelIndex) {
+      return this.AudioAsio.getOutputChannelNames(channelIndex);
+    };
+
+    this.setStreamSampleRate = function(sampleRate) {
+      return this.AudioAsio.setStreamSampleRate(sampleRate);
+    };
+  }
+  util.inherits(AudioAsio, Duplex);
+  exports.AudioAsio = AudioAsio;
+}

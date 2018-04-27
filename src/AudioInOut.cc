@@ -421,15 +421,15 @@ AudioInOut::AudioInOut(Local<Object> options) {
 
   Local<String> inProp = Nan::New("inOptions").ToLocalChecked();
   Local<String> outProp = Nan::New("outOptions").ToLocalChecked();
-  Local<Value> inValue = Nan::Get(options, inProp).ToLocalChecked();
-  Local<Value> outValue = Nan::Get(options, outProp).ToLocalChecked();
+  Nan::MaybeLocal<Value> inValue = Nan::Get(options, inProp);
+  Nan::MaybeLocal<Value> outValue = Nan::Get(options, outProp);
 
-  if ( inValue->IsObject() ) {
-    inOpts = std::make_shared<AudioOptions>(inValue->ToObject());
+  if ( !inValue.IsEmpty() && inValue.ToLocalChecked()->IsObject() ) {
+    inOpts = std::make_shared<AudioOptions>(inValue.ToLocalChecked()->ToObject());
   }
 
-  if ( outValue->IsObject() ) {
-    outOpts = std::make_shared<AudioOptions>(outValue->ToObject());
+  if ( !outValue.IsEmpty() && outValue.ToLocalChecked()->IsObject() ) {
+    outOpts = std::make_shared<AudioOptions>(outValue.ToLocalChecked()->ToObject());
   }
   mInOutContext = std::make_shared<InOutContext>(inOpts, outOpts, InOutCallback);
 }

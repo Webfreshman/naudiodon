@@ -23,6 +23,8 @@ using namespace v8;
 
 namespace streampunk {
 
+typedef std::vector<int> ChannelSelectors;
+
 class Params {
 protected:
   Params() {}
@@ -65,6 +67,25 @@ protected:
     return result;
   } 
 
+  void unpackChannelSelectors(Local<Object> tags, const std::string& key, ChannelSelectors& selectors, int nChan) {
+    Local<Value> val = getKey(tags, key);
+    // Initialize to defaults
+    selectors.resize(nChan);
+    for ( int idx = 0; idx < selectors.size(); ++idx ) {
+      selectors[idx] = idx;
+    }
+
+    if ( val->IsArray() ) {
+      Local<Array> arr = Local<Array>::Cast(val);
+      Local<Value> item;
+      unsigned maxCount = selectors.size() > arr->Length() ? arr->Length() : selectors.size();
+      for ( unsigned idx = 0; idx < maxCount; ++idx ) {
+        item = arr->Get(idx);
+        selectors[idx] = item->Int32Value();
+      }
+    }
+  }
+
 private:
   Params(const Params &);
 };
@@ -77,8 +98,11 @@ public:
       mSampleRate(unpackNum(tags, "sampleRate", 44100)),
       mChannelCount(unpackNum(tags, "channelCount", 2)),
       mSampleFormat(unpackNum(tags, "sampleFormat", 8)),
-      mMaxQueue(unpackNum(tags, "maxQueue", 2))
-  {}
+      mMaxQueue(unpackNum(tags, "maxQueue", 2)),
+      mChannelSelectors()
+  {
+    unpackChannelSelectors(tags, "channelSelectors", mChannelSelectors, mChannelCount);
+  }
   ~AudioOptions() {}
 
   uint32_t deviceID() const  { return mDeviceID; }
@@ -86,6 +110,7 @@ public:
   uint32_t channelCount() const  { return mChannelCount; }
   uint32_t sampleFormat() const  { return mSampleFormat; }
   uint32_t maxQueue() const  { return mMaxQueue; }
+  ChannelSelectors& channelSelectors() { return mChannelSelectors; }
 
   std::string toString() const  { 
     std::stringstream ss;
@@ -97,7 +122,12 @@ public:
     ss << "sample rate " << mSampleRate << ", ";
     ss << "channels " << mChannelCount << ", ";
     ss << "bits per sample " << mSampleFormat << ", ";
-    ss << "max queue " << mMaxQueue;
+    ss << "max queue " << mMaxQueue << ", ";
+    ss << "channel selctors [";
+    for ( size_t idx = 0; idx < mChannelSelectors.size(); ++idx ) {
+      ss << " " << mChannelSelectors[idx];
+    }
+    ss << " ]";
     return ss.str();
   }
 
@@ -107,6 +137,7 @@ private:
   uint32_t mChannelCount;
   uint32_t mSampleFormat;
   uint32_t mMaxQueue;
+  ChannelSelectors mChannelSelectors;
 };
 
 } // namespace streampunk

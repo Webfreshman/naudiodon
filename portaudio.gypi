@@ -144,7 +144,7 @@
                   "LinkIncremental": 1,
                   "SuppressStartupBanner": "true",
                   "AdditionalLibraryDirectories": [],
-                  "ModuleDefinitionFile": "<(portaudiodir)/build/msvc/portaudio.def"
+                  "ModuleDefinitionFile": "<(module_root_dir)/portaudio_asio.def"
                 }
               }
             },
@@ -173,7 +173,7 @@
                   "LinkIncremental": 1,
                   "SuppressStartupBanner": "true",
                   "AdditionalLibraryDirectories": [],
-                  "ModuleDefinitionFile": "<(portaudiodir)/build/msvc/portaudio.def"
+                  "ModuleDefinitionFile": "<(module_root_dir)/portaudio_asio.def"
                 }
               }
             }

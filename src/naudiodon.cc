@@ -18,6 +18,7 @@
 #include "AudioIn.h"
 #include "AudioOut.h"
 #include "AudioInOut.h"
+#include "AudioAsio.h"
 
 NAN_MODULE_INIT(Init) {
   Nan::Set(target, Nan::New("getDevices").ToLocalChecked(),
@@ -26,6 +27,7 @@ NAN_MODULE_INIT(Init) {
   streampunk::AudioIn::Init(target);
   streampunk::AudioOut::Init(target);
   streampunk::AudioInOut::Init(target);
+  streampunk::AudioAsio::Init(target);
 }
 
 NODE_MODULE(portAudio, Init);
