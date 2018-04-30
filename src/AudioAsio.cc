@@ -127,7 +127,7 @@ public:
       }
 
       inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultLowInputLatency;
-      inParams.hostApiSpecificStreamInfo = NULL;
+      inParams.hostApiSpecificStreamInfo = &inAsioStreamInfo;
 
       sampleRate = (double)mInAudioOptions->sampleRate();
       framesPerBuffer = paFramesPerBufferUnspecified;
@@ -172,7 +172,7 @@ public:
       }
 
       outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
-      outParams.hostApiSpecificStreamInfo = NULL;
+      outParams.hostApiSpecificStreamInfo = &outAsioStreamInfo;
 
       sampleRate = (double)mOutAudioOptions->sampleRate();
       framesPerBuffer = paFramesPerBufferUnspecified;
