@@ -30,8 +30,12 @@ namespace streampunk {
 class OutContext {
 public:
   OutContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
-    : mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()), 
-      mCurOffset(0), mActive(true), mFinished(false) {
+    : mAudioOptions(audioOptions)
+    , mChunkQueue(mAudioOptions->maxQueue())
+    , mCurOffset(0)
+    , mActive(false)
+    , mFinished(false)
+    , mStreamCb(cb) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -86,21 +90,96 @@ public:
   }
   
   ~OutContext() {
-    Pa_StopStream(mStream);
+    stop();
     Pa_Terminate();
   }
 
   void start() {
-    PaError errCode = Pa_StartStream(mStream);
+    if ( !isActive() ) {
+      int32_t deviceID;
+      uint32_t sampleFormat;
+      double sampleRate;
+      uint32_t framesPerBuffer;
+      PaError errCode(paNoError);
+
+      PaStreamParameters outParams;
+      memset(&outParams, 0, sizeof(PaStreamParameters));
+
+      deviceID = (int32_t)mAudioOptions->deviceID();
+      if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
+        outParams.device = (PaDeviceIndex)deviceID;
+      else
+        outParams.device = Pa_GetDefaultOutputDevice();
+      if (outParams.device == paNoDevice) {
+        Nan::ThrowError("No default output device");
+        return;
+      }
+      //printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
+
+      outParams.channelCount = mAudioOptions->channelCount();
+      if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels) {
+        Nan::ThrowError("Channel count exceeds maximum number of output channels for device");
+        return;
+      }
+
+      sampleFormat = mAudioOptions->sampleFormat();
+      switch(sampleFormat) {
+      case 8: outParams.sampleFormat = paInt8; break;
+      case 16: outParams.sampleFormat = paInt16; break;
+      case 24: outParams.sampleFormat = paInt24; break;
+      case 32: outParams.sampleFormat = paInt32; break;
+      default:
+        Nan::ThrowError("Invalid sampleFormat");
+        return;
+      }
+
+      outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
+      outParams.hostApiSpecificStreamInfo = NULL;
+
+      sampleRate = (double)mAudioOptions->sampleRate();
+      framesPerBuffer = paFramesPerBufferUnspecified;
+
+      #ifdef __arm__
+      framesPerBuffer = 256;
+      outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighOutputLatency;
+      #endif
+
+      errCode = Pa_OpenStream(&mStream,
+                            NULL, 
+                            &outParams,
+                            sampleRate,
+                            framesPerBuffer,
+                            paNoFlag,
+                            mStreamCb,
+                            this);
     if (errCode != paNoError) {
+      std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
+      Nan::ThrowError(err.c_str());
+      return;
+    }
+
+    errCode = Pa_StartStream(mStream);
+    if ( errCode != paNoError ) {
+      Pa_CloseStream(&mStream);
       std::string err = std::string("Could not start output stream: ") + Pa_GetErrorText(errCode);
-      return Nan::ThrowError(err.c_str());
+      Nan::ThrowError(err.c_str());
+      return;
+    }
+
+    // Mark the stream as now active
+    setActive(true);
     }
   }
 
   void stop() {
-    Pa_StopStream(mStream);
-    Pa_Terminate();
+    if ( isActive() ) {
+      PaError errCode = Pa_StopStream(mStream);
+      if ( errCode == paNoError ) {
+        Pa_CloseStream(mStream);
+        mStream = NULL;
+        setActive(false);
+      }
+    }
   }
 
   void addChunk(std::shared_ptr<AudioChunk> audioChunk) {
@@ -172,10 +251,12 @@ public:
 
   void quit() {
     std::unique_lock<std::mutex> lk(m);
-    mActive = false;
-    mChunkQueue.quit();
-    while(!mFinished)
-      cv.wait(lk);
+    if ( !mFinished ) {
+      mActive = false;
+      mChunkQueue.quit();
+      while(!mFinished)
+        cv.wait(lk);
+    }
   }
 
 private:
@@ -189,10 +270,17 @@ private:
   std::string mErrStr;
   mutable std::mutex m;
   std::condition_variable cv;
+  PaStreamCallback* mStreamCb;
 
   bool isActive() const {
     std::unique_lock<std::mutex> lk(m);
     return mActive;
+  }
+
+  void setActive(bool option) {
+    std::unique_lock<std::mutex> lk(m);
+    mActive = option;
+    return;
   }
 
   uint32_t doCopy(std::shared_ptr<Memory> chunk, void *dst, uint32_t numBytes) {

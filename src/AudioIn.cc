@@ -37,7 +37,10 @@ static void freeAllocCb(char* data, void* hint) {
 class InContext {
 public:
   InContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
-    : mActive(true), mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()) {
+    : mActive(false)
+    , mAudioOptions(audioOptions)
+    , mChunkQueue(mAudioOptions->maxQueue())
+    , mStreamCb(cb) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -92,21 +95,96 @@ public:
   }
 
   ~InContext() {
-    Pa_StopStream(mStream);
+    stop();
     Pa_Terminate();
   }
 
   void start() {
-    PaError errCode = Pa_StartStream(mStream);
-    if (errCode != paNoError) {
-      std::string err = std::string("Could not start input stream: ") + Pa_GetErrorText(errCode);
-      return Nan::ThrowError(err.c_str());
+    if ( !isActive() ) {
+      int32_t deviceID;
+      uint32_t sampleFormat;
+      double sampleRate;
+      uint32_t framesPerBuffer;
+      PaError errCode(paNoError);
+
+      PaStreamParameters inParams;
+      memset(&inParams, 0, sizeof(PaStreamParameters));
+
+      //printf("Input %s\n", mInAudioOptions->toString().c_str());
+      deviceID = (int32_t)mAudioOptions->deviceID();
+      if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
+        inParams.device = (PaDeviceIndex)deviceID;
+      else
+        inParams.device = Pa_GetDefaultInputDevice();
+      if (inParams.device == paNoDevice) {
+        Nan::ThrowError("No default input device");
+        return;
+      }
+
+      inParams.channelCount = mAudioOptions->channelCount();
+      if (inParams.channelCount > Pa_GetDeviceInfo(inParams.device)->maxInputChannels) {
+        Nan::ThrowError("Channel count exceeds maximum number of input channels for device");
+        return;
+      }
+
+      sampleFormat = mAudioOptions->sampleFormat();
+      switch(sampleFormat) {
+      case 8: inParams.sampleFormat = paInt8; break;
+      case 16: inParams.sampleFormat = paInt16; break;
+      case 24: inParams.sampleFormat = paInt24; break;
+      case 32: inParams.sampleFormat = paInt32; break;
+      default:
+        Nan::ThrowError("Invalid sampleFormat");
+        return;
+      }
+
+      inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultLowInputLatency;
+      inParams.hostApiSpecificStreamInfo = NULL;
+
+      sampleRate = (double)mAudioOptions->sampleRate();
+      framesPerBuffer = paFramesPerBufferUnspecified;
+
+      #ifdef __arm__
+      framesPerBuffer = 256;
+      inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultHighInputLatency;
+      #endif
+    
+      errCode = Pa_OpenStream(&mStream,
+                              &inParams, 
+                              NULL,
+                              sampleRate,
+                              framesPerBuffer,
+                              paNoFlag,
+                              mStreamCb,
+                              this);
+      if (errCode != paNoError) {
+        std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
+        Nan::ThrowError(err.c_str());
+        return;
+      }
+
+      errCode = Pa_StartStream(mStream);
+      if ( errCode != paNoError ) {
+        Pa_CloseStream(&mStream);
+        std::string err = std::string("Could not start input stream: ") + Pa_GetErrorText(errCode);
+        Nan::ThrowError(err.c_str());
+        return;
+      }
+
+      // Mark the stream as now active
+      setActive(true);
     }
   }
 
   void stop() {
-    Pa_StopStream(mStream);
-    Pa_Terminate();
+    if ( isActive() ) {
+      PaError errCode = Pa_StopStream(mStream);
+      if ( errCode == paNoError ) {
+        Pa_CloseStream(mStream);
+        mStream = NULL;
+        setActive(false);
+      }
+    }
   }
 
   std::shared_ptr<Memory> readChunk() {
@@ -114,12 +192,15 @@ public:
   }
 
   bool readBuffer(const void *srcBuf, uint32_t frameCount) {
-    const uint8_t *src = (uint8_t *)srcBuf;
-    uint32_t bytesAvailable = frameCount * mAudioOptions->channelCount() * mAudioOptions->sampleFormat() / 8;
-    std::shared_ptr<Memory> dstBuf = Memory::makeNew(bytesAvailable);
-    memcpy(dstBuf->buf(), src, bytesAvailable);
-    mChunkQueue.enqueue(dstBuf);
-    return mActive;
+    bool active = isActive();
+    if ( active ) {
+      const uint8_t *src = (uint8_t *)srcBuf;
+      uint32_t bytesAvailable = frameCount * mAudioOptions->channelCount() * mAudioOptions->sampleFormat() / 8;
+      std::shared_ptr<Memory> dstBuf = Memory::makeNew(bytesAvailable);
+      memcpy(dstBuf->buf(), src, bytesAvailable);
+      mChunkQueue.enqueue(dstBuf);
+    }
+    return active;
   }
 
   void checkStatus(uint32_t statusFlags) {
@@ -156,6 +237,18 @@ private:
   std::string mErrStr;
   mutable std::mutex m;
   std::condition_variable cv;
+  PaStreamCallback* mStreamCb;
+
+  bool isActive() const {
+    std::unique_lock<std::mutex> lk(m);
+    return mActive;
+  }
+
+  void setActive(bool option) {
+    std::unique_lock<std::mutex> lk(m);
+    mActive = option;
+    return;
+  }
 };
 
 int InCallback(const void *input, void *output, unsigned long frameCount,

@@ -33,12 +33,12 @@ function AudioInput(options) {
   if (!(this instanceof AudioInput))
     return new AudioInput(options);
 
-  this.AudioInAdon = new portAudioBindings.AudioIn(options);
+  this.AudioInAddon = new portAudioBindings.AudioIn(options);
   Readable.call(this, {
     highWaterMark: 16384,
     objectMode: false,
     read: size => {
-      this.AudioInAdon.read(size, (err, buf) => {
+      this.AudioInAddon.read(size, (err, buf) => {
         if (err)
           this.emit('error', err); // causes Streampunk Microphone node to exit early...
         else
@@ -47,12 +47,11 @@ function AudioInput(options) {
     }
   });
 
-  this.start = () => this.AudioInAdon.start();
+  this.start = () => this.AudioInAddon.start();
   this.quit = cb => {
-    const quitCb = arguments[0];
-    this.AudioInAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
+    this.AudioInAddon.quit(() => {
+      if (typeof cb === 'function')
+        cb();
     });
   }
 }
@@ -64,24 +63,51 @@ function AudioOutput(options) {
     return new AudioOutput(options);
 
   let Active = true;
-  this.AudioOutAdon = new portAudioBindings.AudioOut(options);
+  this.AudioOutAddon = new portAudioBindings.AudioOut(options);
   Writable.call(this, {
     highWaterMark: 16384,
     decodeStrings: false,
     objectMode: false,
-    write: (chunk, encoding, cb) => this.AudioOutAdon.write(chunk, cb)
+    write: (chunk, encoding, cb) => this.AudioOutAddon.write(chunk, cb)
   });
 
-  this.start = () => this.AudioOutAdon.start();
+  this.start = () => this.AudioOutAddon.start();
+  
   this.quit = cb => {
-    Active = false;
-    const quitCb = arguments[0];
-    this.AudioOutAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
-    });
+    if ( !Active ) {
+      if ( typeof cb === 'function' ) {
+        process.nextTick(cb);
+      }
+    }
+    else {
+      Active = false;
+      this.AudioOutAddon.quit(() => {
+        if (typeof cb === 'function')
+          cb();
+      });
+    }
   }
-  this.on('finish', () => { if (Active) this.quit(); });
+
+  // Override the Writable implementation
+  this.end = function(chunk, encoding, callback) {
+    if ( !chunk ) {
+      this.quit(() => {
+        AudioOutput.super_.prototype.end.call(this, null, encoding, callback);
+      });
+    }
+    else {
+      this.AudioOutAddon.write(chunk, (err) => {
+        if ( err ) {
+          this.emit('error', err);
+        }
+        else {
+          this.quit(() => {
+            AudioOutput.super_.prototype.end.call(this, null, encoding, callback);
+          });
+        }
+      });
+    }
+  }
 }
 util.inherits(AudioOutput, Writable);
 exports.AudioOutput = AudioOutput;
@@ -108,15 +134,42 @@ function AudioInputOutput(options) {
   });
 
   this.start = () => this.AudioInOutAddon.start();
+
   this.quit = cb => {
-    Active = false;
-    const quitCb = arguments[0];
-    this.AudioInOutAddon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
-    });
+    if ( !Active ) {
+      if ( typeof cb === 'function' ) {
+        process.nextTick(cb);
+      }
+    }
+    else {
+      Active = false;
+      this.AudioInOutAddon.quit(() => {
+        if (typeof cb === 'function')
+          cb();
+      });
+    }
   }
-  this.on('finish', () => { if (Active) this.quit(); });
+
+  // Override the Duplex implementation
+  this.end = function(chunk, encoding, callback) {
+    if ( !chunk ) {
+      this.quit(() => {
+        AudioInputOutput.super_.prototype.end.call(this, null, encoding, callback);
+      });
+    }
+    else {
+      this.AudioInOutAddon.write(chunk, (err) => {
+        if ( err ) {
+          this.emit('error', err);
+        }
+        else {
+          this.quit(() => {
+            AudioInputOutput.super_.prototype.end.call(this, null, encoding, callback);
+          });
+        }
+      });
+    }
+  }
 }
 util.inherits(AudioInputOutput, Duplex);
 exports.AudioInputOutput = AudioInputOutput;
@@ -148,16 +201,43 @@ if ( os.platform() == 'win32' ) {
     });
 
     this.start = () => this.AudioAsioAddon.start();
+  
     this.quit = cb => {
-      Active = false;
-      const quitCb = arguments[0];
-      this.AudioAsioAddon.quit(() => {
-        if (typeof quitCb === 'function')
-          quitCb();
-      });
+      if ( !Active ) {
+        if ( typeof cb === 'function' ) {
+          process.nextTick(cb);
+        }
+      }
+      else {
+        Active = false;
+        this.AudioAsioAddon.quit(() => {
+          if (typeof cb === 'function')
+            cb();
+        });
+      }
     }
-    this.on('finish', () => { if (Active) this.quit(); });
 
+    // Override the Duplex implementation
+    this.end = function(chunk, encoding, callback) {
+      if ( !chunk ) {
+        this.quit(() => {
+          AudioAsio.super_.prototype.end.call(this, null, encoding, callback);
+        });
+      }
+      else {
+        this.AudioAsioAddon.write(chunk, (err) => {
+          if ( err ) {
+            this.emit('error', err);
+          }
+          else {
+            this.quit(() => {
+              AudioAsio.super_.prototype.end.call(this, null, encoding, callback);
+            });
+          }
+        });
+      }
+    }
+  
     this.getAvailableBufferSizes = function() {
       return this.AudioAsioAddon.getAvailableBufferSizes();
     };

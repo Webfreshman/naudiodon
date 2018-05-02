@@ -48,22 +48,18 @@ public:
   AsioContext(std::shared_ptr<AudioOptions> inAudioOptions,
                 std::shared_ptr<AudioOptions> outAudioOptions, 
                 PaStreamCallback *cb)
-    : mActive(true)
+    : mActive(false)
     , mInAudioOptions(inAudioOptions)
     , mOutAudioOptions(outAudioOptions)
     , mInChunkQueue(mInAudioOptions->maxQueue())
     , mOutChunkQueue(mOutAudioOptions->maxQueue())
     , mOutCurOffset(0)
     , mOutFinished(false)
-    , mStream(NULL) {
+    , mStream(NULL)
+    , mSampleRate(-1.0)
+    , mStreamCb(cb) {
 
-    int32_t deviceID;
-    uint32_t sampleFormat;
-    double sampleRate;
-    uint32_t framesPerBuffer;
-    const PaDeviceInfo* deviceInfo;
-    PaAsioStreamInfo outAsioStreamInfo;
-    PaAsioStreamInfo inAsioStreamInfo;
+
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
       std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
@@ -73,155 +69,178 @@ public:
 
     if ( !mInAudioOptions && !mOutAudioOptions ) {
       Nan::ThrowError("Input and/or output options must be specified");
-    }
-
-    PaStreamParameters inParams;
-    PaStreamParameters outParams;
-    memset(&inParams, 0, sizeof(PaStreamParameters));
-    memset(&outParams, 0, sizeof(PaStreamParameters));
-    memset(&outAsioStreamInfo, 0, sizeof(outAsioStreamInfo));
-    outAsioStreamInfo.size = sizeof(outAsioStreamInfo);
-    outAsioStreamInfo.hostApiType = paASIO;
-    outAsioStreamInfo.version = 1;
-    outAsioStreamInfo.flags = paAsioUseChannelSelectors;
-    outAsioStreamInfo.channelSelectors = mOutAudioOptions->channelSelectors().data();
-    memset(&inAsioStreamInfo, 0, sizeof(inAsioStreamInfo));
-    inAsioStreamInfo.size = sizeof(inAsioStreamInfo);
-    inAsioStreamInfo.hostApiType = paASIO;
-    inAsioStreamInfo.version = 1;
-    inAsioStreamInfo.flags = paAsioUseChannelSelectors;
-    inAsioStreamInfo.channelSelectors = mInAudioOptions->channelSelectors().data();
-
-    if ( mInAudioOptions ) {
-      //printf("Input %s\n", mInAudioOptions->toString().c_str());
-      deviceID = (int32_t)mInAudioOptions->deviceID();
-      if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
-        inParams.device = (PaDeviceIndex)deviceID;
-      else
-        inParams.device = Pa_GetDefaultInputDevice();
-      if (inParams.device == paNoDevice) {
-        Nan::ThrowError("No default input device");
-        return;
-      }
-      deviceInfo = Pa_GetDeviceInfo(inParams.device);
-      if ( paASIO != Pa_GetHostApiInfo(deviceInfo->hostApi)->type ) {
-        Nan::ThrowError("Not an ASIO device");
-      }
-      //printf("Input device name is %s\n", Pa_GetDeviceInfo(inParams.device)->name);
-
-      inParams.channelCount = mInAudioOptions->channelCount();
-      if (inParams.channelCount > Pa_GetDeviceInfo(inParams.device)->maxInputChannels) {
-        Nan::ThrowError("Channel count exceeds maximum number of input channels for device");
-        return;
-      }
-
-      sampleFormat = mInAudioOptions->sampleFormat();
-      switch(sampleFormat) {
-      case 8: inParams.sampleFormat = paInt8; break;
-      case 16: inParams.sampleFormat = paInt16; break;
-      case 24: inParams.sampleFormat = paInt24; break;
-      case 32: inParams.sampleFormat = paInt32; break;
-      default: 
-        Nan::ThrowError("Invalid sampleFormat");
-        return;
-      }
-
-      inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultLowInputLatency;
-      inParams.hostApiSpecificStreamInfo = &inAsioStreamInfo;
-
-      sampleRate = (double)mInAudioOptions->sampleRate();
-      framesPerBuffer = paFramesPerBufferUnspecified;
-
-      #ifdef __arm__
-      framesPerBuffer = 256;
-      inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultHighInputLatency;
-      #endif
-    }
-
-    if ( mOutAudioOptions ) {
-      deviceID = (int32_t)mOutAudioOptions->deviceID();
-      if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
-        outParams.device = (PaDeviceIndex)deviceID;
-      else
-        outParams.device = Pa_GetDefaultOutputDevice();
-      if (outParams.device == paNoDevice) {
-        Nan::ThrowError("No default output device");
-        return;
-      }
-      deviceInfo = Pa_GetDeviceInfo(outParams.device);
-      if ( paASIO != Pa_GetHostApiInfo(deviceInfo->hostApi)->type ) {
-        Nan::ThrowError("Not an ASIO device");
-      }
-      //printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
-
-      outParams.channelCount = mOutAudioOptions->channelCount();
-      if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels) {
-        Nan::ThrowError("Channel count exceeds maximum number of output channels for device");
-        return;
-      }
-
-      sampleFormat = mOutAudioOptions->sampleFormat();
-      switch(sampleFormat) {
-      case 8: outParams.sampleFormat = paInt8; break;
-      case 16: outParams.sampleFormat = paInt16; break;
-      case 24: outParams.sampleFormat = paInt24; break;
-      case 32: outParams.sampleFormat = paInt32; break;
-      default:
-        Nan::ThrowError("Invalid sampleFormat");
-        return;
-      }
-
-      outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
-      outParams.hostApiSpecificStreamInfo = &outAsioStreamInfo;
-
-      sampleRate = (double)mOutAudioOptions->sampleRate();
-      framesPerBuffer = paFramesPerBufferUnspecified;
-
-      #ifdef __arm__
-      framesPerBuffer = 256;
-      outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighOutputLatency;
-      #endif
-    }
-
-    if ( mInAudioOptions && mOutAudioOptions ) {
-      if ( mInAudioOptions->sampleRate() != mOutAudioOptions->sampleRate() ) {
-        Nan::ThrowError("Input/output sample rates must match");
-        return;
-      }
-    }
-  
-    errCode = Pa_OpenStream(&mStream,
-                            mInAudioOptions ? &inParams : NULL, 
-                            mOutAudioOptions ? &outParams : NULL,
-                            sampleRate,
-                            framesPerBuffer,
-                            paNoFlag,
-                            cb,
-                            this);
-    if (errCode != paNoError) {
-      std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
-      Nan::ThrowError(err.c_str());
       return;
     }
   }
 
   ~AsioContext() {
-    Pa_StopStream(mStream);
+    stop();
     Pa_Terminate();
   }
 
   void start() {
-    PaError errCode = Pa_StartStream(mStream);
-    if (errCode != paNoError) {
-      std::string err = std::string("Could not start input/output stream: ") + Pa_GetErrorText(errCode);
-      Nan::ThrowError(err.c_str());
-      return;
+    // Start stream if not already actively streaming
+    if ( !isActive() ) {
+      int32_t deviceID;
+      uint32_t sampleFormat;
+      double sampleRate;
+      uint32_t framesPerBuffer;
+      const PaDeviceInfo* deviceInfo;
+      PaAsioStreamInfo outAsioStreamInfo;
+      PaAsioStreamInfo inAsioStreamInfo;
+      PaError errCode(paNoError);
+      PaStreamParameters inParams;
+      PaStreamParameters outParams;
+
+      memset(&inParams, 0, sizeof(PaStreamParameters));
+      memset(&outParams, 0, sizeof(PaStreamParameters));
+      memset(&outAsioStreamInfo, 0, sizeof(outAsioStreamInfo));
+      outAsioStreamInfo.size = sizeof(outAsioStreamInfo);
+      outAsioStreamInfo.hostApiType = paASIO;
+      outAsioStreamInfo.version = 1;
+      outAsioStreamInfo.flags = paAsioUseChannelSelectors;
+      outAsioStreamInfo.channelSelectors = mOutAudioOptions->channelSelectors().data();
+      memset(&inAsioStreamInfo, 0, sizeof(inAsioStreamInfo));
+      inAsioStreamInfo.size = sizeof(inAsioStreamInfo);
+      inAsioStreamInfo.hostApiType = paASIO;
+      inAsioStreamInfo.version = 1;
+      inAsioStreamInfo.flags = paAsioUseChannelSelectors;
+      inAsioStreamInfo.channelSelectors = mInAudioOptions->channelSelectors().data();
+
+      if ( mInAudioOptions ) {
+        //printf("Input %s\n", mInAudioOptions->toString().c_str());
+        deviceID = (int32_t)mInAudioOptions->deviceID();
+        if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
+          inParams.device = (PaDeviceIndex)deviceID;
+        else
+          inParams.device = Pa_GetDefaultInputDevice();
+        if (inParams.device == paNoDevice) {
+          Nan::ThrowError("No default input device");
+          return;
+        }
+        deviceInfo = Pa_GetDeviceInfo(inParams.device);
+        if ( paASIO != Pa_GetHostApiInfo(deviceInfo->hostApi)->type ) {
+          Nan::ThrowError("Not an ASIO device");
+          return;
+        }
+
+        inParams.channelCount = mInAudioOptions->channelCount();
+        if (inParams.channelCount > Pa_GetDeviceInfo(inParams.device)->maxInputChannels) {
+          Nan::ThrowError("Channel count exceeds maximum number of input channels for device");
+          return;
+        }
+
+        sampleFormat = mInAudioOptions->sampleFormat();
+        switch(sampleFormat) {
+        case 8: inParams.sampleFormat = paInt8; break;
+        case 16: inParams.sampleFormat = paInt16; break;
+        case 24: inParams.sampleFormat = paInt24; break;
+        case 32: inParams.sampleFormat = paInt32; break;
+        default: 
+          Nan::ThrowError("Invalid sampleFormat");
+          return;
+        }
+
+        inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultLowInputLatency;
+        inParams.hostApiSpecificStreamInfo = &inAsioStreamInfo;
+
+        sampleRate = ( mSampleRate < 0.0) ? (double)mInAudioOptions->sampleRate() : mSampleRate;
+        framesPerBuffer = paFramesPerBufferUnspecified;
+
+        #ifdef __arm__
+        framesPerBuffer = 256;
+        inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultHighInputLatency;
+        #endif
+      }
+
+      if ( mOutAudioOptions ) {
+        deviceID = (int32_t)mOutAudioOptions->deviceID();
+        if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
+          outParams.device = (PaDeviceIndex)deviceID;
+        else
+          outParams.device = Pa_GetDefaultOutputDevice();
+        if (outParams.device == paNoDevice) {
+          Nan::ThrowError("No default output device");
+          return;
+        }
+        deviceInfo = Pa_GetDeviceInfo(outParams.device);
+        if ( paASIO != Pa_GetHostApiInfo(deviceInfo->hostApi)->type ) {
+          Nan::ThrowError("Not an ASIO device");
+          return;
+        }
+
+        outParams.channelCount = mOutAudioOptions->channelCount();
+        if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels) {
+          Nan::ThrowError("Channel count exceeds maximum number of output channels for device");
+          return;
+        }
+
+        sampleFormat = mOutAudioOptions->sampleFormat();
+        switch(sampleFormat) {
+        case 8: outParams.sampleFormat = paInt8; break;
+        case 16: outParams.sampleFormat = paInt16; break;
+        case 24: outParams.sampleFormat = paInt24; break;
+        case 32: outParams.sampleFormat = paInt32; break;
+        default:
+          Nan::ThrowError("Invalid sampleFormat");
+          return;
+        }
+
+        outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
+        outParams.hostApiSpecificStreamInfo = &outAsioStreamInfo;
+
+        sampleRate = (mSampleRate < 0.0) ? (double)mOutAudioOptions->sampleRate() : sampleRate;
+        framesPerBuffer = paFramesPerBufferUnspecified;
+
+        #ifdef __arm__
+        framesPerBuffer = 256;
+        outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighOutputLatency;
+        #endif
+      }
+
+      if ( mInAudioOptions && mOutAudioOptions ) {
+        if ( mInAudioOptions->sampleRate() != mOutAudioOptions->sampleRate() ) {
+          Nan::ThrowError("Input/output sample rates must match");
+          return;
+        }
+      }
+    
+      errCode = Pa_OpenStream(&mStream,
+                              mInAudioOptions ? &inParams : NULL, 
+                              mOutAudioOptions ? &outParams : NULL,
+                              sampleRate,
+                              framesPerBuffer,
+                              paNoFlag,
+                              mStreamCb,
+                              this);
+      if (errCode != paNoError) {
+        std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
+        Nan::ThrowError(err.c_str());
+        return;
+      }
+
+      errCode = Pa_StartStream(mStream);
+      if ( errCode != paNoError ) {
+        Pa_CloseStream(&mStream);
+        std::string err = std::string("Could not start input/output stream: ") + Pa_GetErrorText(errCode);
+        Nan::ThrowError(err.c_str());
+        return;
+      }
+
+      // Mark the stream as now active
+      setActive(true);
     }
   }
 
   void stop() {
-    Pa_StopStream(mStream);
-    Pa_Terminate();
+    if ( isActive() ) {
+      PaError errCode = Pa_StopStream(mStream);
+      if ( errCode == paNoError ) {
+        Pa_CloseStream(mStream);
+        mStream = NULL;
+        setActive(false);
+      }
+    }
   }
 
   PaError getAvailableBufferSizes
@@ -367,8 +386,9 @@ public:
   */
   PaError setStreamSampleRate( double sampleRate ) {
     PaError status(paStreamIsNotStopped);
-    if ( mStream ) {
-      status = PaAsio_SetStreamSampleRate(mStream, sampleRate);
+    if ( !isActive() ) {
+      mSampleRate = sampleRate;
+      status = paNoError;
     }
 
     return status;
@@ -383,12 +403,15 @@ public:
       Nan::ThrowError("Input configuration was not defined");
       return false;
     }
-    const uint8_t *src = (uint8_t *)srcBuf;
-    uint32_t bytesAvailable = frameCount * mInAudioOptions->channelCount() * mInAudioOptions->sampleFormat() / 8;
-    std::shared_ptr<Memory> dstBuf = Memory::makeNew(bytesAvailable);
-    memcpy(dstBuf->buf(), src, bytesAvailable);
-    mInChunkQueue.enqueue(dstBuf);
-    return mActive;
+    bool active = isActive();
+    if ( active ) {
+      const uint8_t *src = (uint8_t *)srcBuf;
+      uint32_t bytesAvailable = frameCount * mInAudioOptions->channelCount() * mInAudioOptions->sampleFormat() / 8;
+      std::shared_ptr<Memory> dstBuf = Memory::makeNew(bytesAvailable);
+      memcpy(dstBuf->buf(), src, bytesAvailable);
+      mInChunkQueue.enqueue(dstBuf);
+    }
+    return active;
   }
 
   void addChunk(std::shared_ptr<AudioChunk> audioChunk) {
@@ -404,7 +427,7 @@ public:
     uint8_t *dst = (uint8_t *)buf;
     uint32_t bytesRemaining = frameCount * mOutAudioOptions->channelCount() * mOutAudioOptions->sampleFormat() / 8;
 
-    uint32_t active = isActive();
+    bool active = isActive();
     if (!active && (0 == mOutChunkQueue.size()) && 
         (!mOutCurChunk || (mOutCurChunk && (bytesRemaining >= mOutCurChunk->chunk()->numBytes() - mOutCurOffset)))) {
       if (mOutCurChunk) {
@@ -468,11 +491,13 @@ public:
 
   void quit() {
     std::unique_lock<std::mutex> lk(m);
-    mActive = false;
-    mInChunkQueue.quit();
-    mOutChunkQueue.quit();
-    while(!mOutFinished)
-      cv.wait(lk);
+    if ( !mOutFinished ) {
+      mActive = false;
+      mInChunkQueue.quit();
+      mOutChunkQueue.quit();
+      while(!mOutFinished)
+        cv.wait(lk);
+    }
   }
 
   bool isInput() {
@@ -496,10 +521,18 @@ private:
   std::string mErrStr;
   mutable std::mutex m;
   std::condition_variable cv;
+  double mSampleRate;
+  PaStreamCallback* mStreamCb;
 
   bool isActive() const {
     std::unique_lock<std::mutex> lk(m);
     return mActive;
+  }
+
+  void setActive(bool option) {
+    std::unique_lock<std::mutex> lk(m);
+    mActive = option;
+    return;
   }
 
   uint32_t doCopy(std::shared_ptr<Memory> chunk, void *dst, uint32_t numBytes) {
@@ -514,18 +547,21 @@ private:
 int AsioIoCallback(const void *input, void *output, unsigned long frameCount,
                const PaStreamCallbackTimeInfo *timeInfo,
                PaStreamCallbackFlags statusFlags, void *userData) {
-  int retCode(paContinue);
+  int outputRetCode(paComplete);
+  int inputRetCode(paComplete);
   AsioContext *context = (AsioContext *)userData;
   context->checkStatus(statusFlags);
   if ( context->isInput() ) {
-    retCode = context->readBuffer(input, frameCount) ? paContinue : paComplete;
+    inputRetCode = context->readBuffer(input, frameCount) ? paContinue : paComplete;
   }
 
-  if ( context->isOutput() && (retCode == paContinue) ) {
-    retCode = context->fillBuffer(output, frameCount) ? paContinue : paComplete;
+  if ( context->isOutput() ) {
+    outputRetCode = context->fillBuffer(output, frameCount) ? paContinue : paComplete;
   }
 
-  return retCode;
+  int finalRetCode = ((inputRetCode == paComplete) && (outputRetCode == paComplete)) ? paComplete : paContinue;
+
+  return finalRetCode;
 }
 
 class InputAsioWorker : public Nan::AsyncWorker {
@@ -591,12 +627,12 @@ class OutputAsioWorker : public Nan::AsyncWorker {
     std::shared_ptr<AudioChunk> mAudioChunk;
 };
 
-class QuitAsioWork : public Nan::AsyncWorker {
+class QuitAsioWorker : public Nan::AsyncWorker {
   public:
-    QuitAsioWork(std::shared_ptr<AsioContext> AsioContext, Nan::Callback *callback)
+    QuitAsioWorker(std::shared_ptr<AsioContext> AsioContext, Nan::Callback *callback)
       : AsyncWorker(callback), mAsioContext(AsioContext)
     { }
-    ~QuitAsioWork() {}
+    ~QuitAsioWorker() {}
 
     void Execute() {
       mAsioContext->quit();
@@ -648,7 +684,6 @@ NAN_METHOD(AudioAsio::Read) {
   if (!info[1]->IsFunction())
     return Nan::ThrowError("AudioAsio Read requires a valid callback as the second parameter");
 
-  // uint32_t sizeAdv = Nan::To<uint32_t>(info[0]).FromJust();
   Local<Function> callback = Local<Function>::Cast(info[1]);
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
 
@@ -689,7 +724,7 @@ NAN_METHOD(AudioAsio::Quit) {
   Local<Function> callback = Local<Function>::Cast(info[0]);
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
 
-  AsyncQueueWorker(new QuitAsioWork(obj->getContext(), new Nan::Callback(callback)));
+  AsyncQueueWorker(new QuitAsioWorker(obj->getContext(), new Nan::Callback(callback)));
   info.GetReturnValue().SetUndefined();
 }
 
