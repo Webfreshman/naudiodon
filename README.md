@@ -2,21 +2,21 @@
 
 A [Node.js](http://nodejs.org/) [addon](http://nodejs.org/api/addons.html) that provides a wrapper around the [PortAudio](http://portaudio.com/) library, enabling an application to record and play audio with cross platform support. With this library, you can create [node.js streams](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html) that can be piped to or from other streams, such as files and network connections. This library supports back-pressure.
 
-This is a fork of [node-portaudio](/joeferner/node-portaudio), refactored by:
+This is a fork of [naudiodon](https://github.com/Streampunk/naudiodon) by Streampunk, refactored by:
 
-* changing from an event model to a stream model;
-* linking to the v8 libraries through the [Native Abstractions for Node.js (NAN)](/nodejs/nan) library to enable more portability between node versions.
-* adding in local copies of libraries so that portaudio does not have to be installed preemptively.
+* Adding in local copies of libraries so that portaudio does not have to be installed preemptively (Linux and MacOS only).
+* On Windows platforms, PortAudio is built from sources with [ASIO](https://en.wikipedia.org/wiki/Audio_Stream_Input/Output) support enabled. The [Steinberg ASIO SDK](https://www.steinberg.net/en/company/developers.html) is downloaded during a pre-installation step and used with the PortAudio build. This means the necessary Node.js native module addon [build tools](https://www.npmjs.com/package/windows-build-tools) must be available in order to install the module.
+* Two new streaming classes (AudioInOut and AudioAsio) have been added to support full duplex (bi-directional) PortAudio devices.
 
-Little of the original remains but I am very grateful for Joe Ferner for the inspiration and framework to get started.
+I am very grateful for Joe Ferner and Streampunk for the inspiration and framework to get started.
 
-This library has been tested on MacOS X 10.11, Windows 10, Linux Ubuntu Trusty and Raspbian Jessie (`armhf` architecture).
+This library has been tested on Windows 7 but is assumed to still work on the following platforms: MacOS X 10.11, Windows 10, Linux Ubuntu Trusty and Raspbian Jessie (`armhf` architecture).
 
 Note: This is a server side library. It is not intended as a means to play and record audio via a browser.
 
 ## Installation
 
-Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites.
+Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package contains PortAudio as a submodule and automatically downloads the Steinberg ASIO SDK during a pre-installation step on Windows platforms.
 
 Naudiodon is designed to be `require`d to use from your own application to provide async processing. For example:
 
@@ -173,4 +173,4 @@ Contributions can be made via pull requests and will be considered by the author
 
 This software is released under the Apache 2.0 license. Copyright 2017 Streampunk Media Ltd.
 
-This software uses libraries from the PortAudio project. The [license terms for PortAudio](http://portaudio.com/license.html) are stated to be an [MIT license](http://opensource.org/licenses/mit-license.php). Streampunk Media are grateful to Ross Bencina and Phil Burk for their excellent library.
+This software uses libraries from the PortAudio project. The [license terms for PortAudio](http://portaudio.com/license.html) are stated to be an [MIT license](http://opensource.org/licenses/mit-license.php). Streampunk Media are grateful to Ross Bencina and Phil Burk for their excellent library. The software, on Windows platforms, will be built from sources with PortAudio ASIO support. During the pre-installation step the [Steinberg ASIO SDK](https://www.steinberg.net/en/company/developers.html) will be downloaded and used by the PortAudio build. The resulting binary **CANNOT** be re-distrubted without licensing approval from Steinberg. The Node.js module assumes the developer has a Steinberg developer account. Due to these restrictions and vague licensing requirements from Steinberg, this fork of naudiodon is intended for personal, non-commercial use.

@@ -43,8 +43,8 @@ public:
     : mActive(false)
     , mInAudioOptions(inAudioOptions)
     , mOutAudioOptions(outAudioOptions)
-    , mInChunkQueue(mInAudioOptions->maxQueue())
-    , mOutChunkQueue(mOutAudioOptions->maxQueue())
+    , mInChunkQueue(inAudioOptions ? inAudioOptions->maxQueue() : 0)
+    , mOutChunkQueue(outAudioOptions ? outAudioOptions->maxQueue() : 0)
     , mOutCurOffset(0)
     , mOutFinished(false)
     , mStreamCb(cb) {
@@ -303,12 +303,15 @@ public:
 
   void quit() {
     std::unique_lock<std::mutex> lk(m);
-    if ( !mOutFinished ) {
-      mActive = false;
+    mActive = false;
+    if ( isInput() ) {
       mInChunkQueue.quit();
+    }
+
+    if ( isOutput() && !mOutFinished ) {
       mOutChunkQueue.quit();
       while(!mOutFinished)
-        cv.wait(lk);
+        cv.wait(lk);  
     }
   }
 
@@ -438,12 +441,12 @@ class OutputIoWorker : public Nan::AsyncWorker {
     std::shared_ptr<AudioChunk> mAudioChunk;
 };
 
-class QuitIotWorker : public Nan::AsyncWorker {
+class QuitIoWorker : public Nan::AsyncWorker {
   public:
-    QuitIotWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
+    QuitIoWorker(std::shared_ptr<InOutContext> InOutContext, Nan::Callback *callback)
       : AsyncWorker(callback), mInOutContext(InOutContext)
     { }
-    ~QuitIotWorker() {}
+    ~QuitIoWorker() {}
 
     void Execute() {
       mInOutContext->quit();
@@ -536,7 +539,7 @@ NAN_METHOD(AudioInOut::Quit) {
   Local<Function> callback = Local<Function>::Cast(info[0]);
   AudioInOut* obj = Nan::ObjectWrap::Unwrap<AudioInOut>(info.Holder());
 
-  AsyncQueueWorker(new QuitIotWorker(obj->getContext(), new Nan::Callback(callback)));
+  AsyncQueueWorker(new QuitIoWorker(obj->getContext(), new Nan::Callback(callback)));
   info.GetReturnValue().SetUndefined();
 }
 
