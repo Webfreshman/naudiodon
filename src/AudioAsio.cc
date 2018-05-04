@@ -51,14 +51,13 @@ public:
     : mActive(false)
     , mInAudioOptions(inAudioOptions)
     , mOutAudioOptions(outAudioOptions)
-    , mInChunkQueue(mInAudioOptions->maxQueue())
-    , mOutChunkQueue(mOutAudioOptions->maxQueue())
+    , mInChunkQueue(mInAudioOptions ? mInAudioOptions->maxQueue() : 0)
+    , mOutChunkQueue(mOutAudioOptions ? mOutAudioOptions->maxQueue() : 0)
     , mOutCurOffset(0)
     , mOutFinished(false)
     , mStream(NULL)
     , mSampleRate(-1.0)
     , mStreamCb(cb) {
-
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -92,22 +91,15 @@ public:
       PaStreamParameters inParams;
       PaStreamParameters outParams;
 
-      memset(&inParams, 0, sizeof(PaStreamParameters));
-      memset(&outParams, 0, sizeof(PaStreamParameters));
-      memset(&outAsioStreamInfo, 0, sizeof(outAsioStreamInfo));
-      outAsioStreamInfo.size = sizeof(outAsioStreamInfo);
-      outAsioStreamInfo.hostApiType = paASIO;
-      outAsioStreamInfo.version = 1;
-      outAsioStreamInfo.flags = paAsioUseChannelSelectors;
-      outAsioStreamInfo.channelSelectors = mOutAudioOptions->channelSelectors().data();
-      memset(&inAsioStreamInfo, 0, sizeof(inAsioStreamInfo));
-      inAsioStreamInfo.size = sizeof(inAsioStreamInfo);
-      inAsioStreamInfo.hostApiType = paASIO;
-      inAsioStreamInfo.version = 1;
-      inAsioStreamInfo.flags = paAsioUseChannelSelectors;
-      inAsioStreamInfo.channelSelectors = mInAudioOptions->channelSelectors().data();
-
       if ( mInAudioOptions ) {
+        memset(&inParams, 0, sizeof(PaStreamParameters));
+        memset(&inAsioStreamInfo, 0, sizeof(inAsioStreamInfo));
+        inAsioStreamInfo.size = sizeof(inAsioStreamInfo);
+        inAsioStreamInfo.hostApiType = paASIO;
+        inAsioStreamInfo.version = 1;
+        inAsioStreamInfo.flags = paAsioUseChannelSelectors;
+        inAsioStreamInfo.channelSelectors = mInAudioOptions->channelSelectors().data();
+
         //printf("Input %s\n", mInAudioOptions->toString().c_str());
         deviceID = (int32_t)mInAudioOptions->deviceID();
         if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
@@ -154,6 +146,14 @@ public:
       }
 
       if ( mOutAudioOptions ) {
+        memset(&outParams, 0, sizeof(PaStreamParameters));
+        memset(&outAsioStreamInfo, 0, sizeof(outAsioStreamInfo));
+        outAsioStreamInfo.size = sizeof(outAsioStreamInfo);
+        outAsioStreamInfo.hostApiType = paASIO;
+        outAsioStreamInfo.version = 1;
+        outAsioStreamInfo.flags = paAsioUseChannelSelectors;
+        outAsioStreamInfo.channelSelectors = mOutAudioOptions->channelSelectors().data();
+
         deviceID = (int32_t)mOutAudioOptions->deviceID();
         if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
           outParams.device = (PaDeviceIndex)deviceID;
@@ -491,12 +491,15 @@ public:
 
   void quit() {
     std::unique_lock<std::mutex> lk(m);
-    if ( !mOutFinished ) {
-      mActive = false;
+    mActive = false;
+    if ( isInput() ) {
       mInChunkQueue.quit();
+    }
+
+    if ( isOutput() && !mOutFinished ) {
       mOutChunkQueue.quit();
       while(!mOutFinished)
-        cv.wait(lk);
+        cv.wait(lk);  
     }
   }
 
@@ -664,6 +667,7 @@ AudioAsio::AudioAsio(Local<Object> options) {
   if ( !outValue.IsEmpty() && outValue.ToLocalChecked()->IsObject() ) {
     outOpts = std::make_shared<AudioOptions>(outValue.ToLocalChecked()->ToObject());
   }
+
   mAsioContext = std::make_shared<AsioContext>(inOpts, outOpts, AsioIoCallback);
 }
 AudioAsio::~AudioAsio() {}
