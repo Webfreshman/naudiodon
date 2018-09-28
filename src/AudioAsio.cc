@@ -676,6 +676,9 @@ void AudioAsio::doStart() { mAsioContext->start(); }
 
 NAN_METHOD(AudioAsio::Start) {
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
   obj->doStart();
   info.GetReturnValue().SetUndefined();
 }
@@ -690,6 +693,10 @@ NAN_METHOD(AudioAsio::Read) {
 
   Local<Function> callback = Local<Function>::Cast(info[1]);
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
+
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
 
   if ( !obj->getContext()->isInput() ) {
     return Nan::ThrowError("AudioAsio is not configured for input");
@@ -711,6 +718,10 @@ NAN_METHOD(AudioAsio::Write) {
   Local<Function> callback = Local<Function>::Cast(info[1]);
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
 
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
+
   if ( !obj->getContext()->isOutput() ) {
     return Nan::ThrowError("AudioAsio is not configured for output");
   }
@@ -728,7 +739,14 @@ NAN_METHOD(AudioAsio::Quit) {
   Local<Function> callback = Local<Function>::Cast(info[0]);
   AudioAsio* obj = Nan::ObjectWrap::Unwrap<AudioAsio>(info.Holder());
 
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
+
   AsyncQueueWorker(new QuitAsioWorker(obj->getContext(), new Nan::Callback(callback)));
+  // Destroy the context after scheduling quit worker
+  obj->mAsioContext.reset();
+
   info.GetReturnValue().SetUndefined();
 }
 
@@ -739,6 +757,10 @@ NAN_METHOD(AudioAsio::GetAvailableBufferSizes) {
   long preferredBufferSizeFrames;
   long granularity;
   v8::Local<v8::Object> result = Nan::New<v8::Object>();
+
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
 
   PaError status = obj->getContext()->getAvailableBufferSizes(
                                       AsioContext::AsioDirection::INPUT,
@@ -795,6 +817,10 @@ NAN_METHOD(AudioAsio::ShowControlPanel) {
     return;
   }
 
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
+
   Nan::Utf8String dirStr(info[0]);
 
   if ( 0 == strncmp(*dirStr, "input", dirStr.length()) ) {
@@ -828,6 +854,10 @@ NAN_METHOD(AudioAsio::GetInputChannelNames) {
     devIdx = Nan::To<int32_t>(info[0]).FromJust();
   }
 
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
+  }
+
   status = obj->getContext()->getInputChannelNames(devIdx, chanList);
   if ( status != paNoError ) {
     Nan::ThrowError(Pa_GetErrorText(status));
@@ -857,6 +887,10 @@ NAN_METHOD(AudioAsio::GetOutputChannelNames) {
 
   if ( (info.Length() > 0) && (info[0]->IsInt32()) ) {
     devIdx = Nan::To<int32_t>(info[0]).FromJust();
+  }
+
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
   }
 
   status = obj->getContext()->getOutputChannelNames(devIdx, chanList);
@@ -889,6 +923,10 @@ NAN_METHOD(AudioAsio::SetStreamSampleRate) {
   if ( !info[0]->IsNumber() ) {
     Nan::ThrowError("Sample rate must be a number");
     return;
+  }
+
+  if ( !obj->mAsioContext ) {
+    return Nan::ThrowError("AudioAsio context has already been destroyed (quit)");
   }
 
   PaError status = obj->getContext()->setStreamSampleRate(Nan::To<double>(info[0]).FromJust());
